@@ -70,7 +70,6 @@ class DialogueAgent extends BaseParticipant {
             // Animate the pulse
             const duration = 1200; // ms
             const startTime = performance.now();
-            const animId = Symbol();
             const animatePulse = () => {
                 const elapsed = performance.now() - startTime;
                 const t = Math.min(elapsed / duration, 1); // 0 → 1
