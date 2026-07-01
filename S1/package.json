@@ -1,0 +1,13 @@
+{
+  "name": "mozaik-treejs-example",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Mozaik multi-participant tree.js example",
+  "scripts": {
+    "start": "node tree.js"
+  },
+  "dependencies": {
+    "@mozaik-ai/core": "^3.14.0"
+  }
+}
