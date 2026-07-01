@@ -13,15 +13,32 @@ import {
   SemanticEvent,
 } from "@mozaik-ai/core";
 
+// ── Tone → colour mapping (ADR-004) ------------------------------------
+
+const TONE_COLORS: Record<string, number> = {
+  concern:   0xff5c7a,
+  reflection:0x66ccff,
+  context:   0xffcc66,
+  question:  0xb28dff,
+  resolution:0x6ee7a8,
+};
+
 // ── Agent ---------------------------------------------------------------
 
 /**
- * A dialogue participant that logs / renders semantic events of type
- * "dialogue:message" sent through the AgenticEnvironment.
+ * A dialogue participant that renders semantic events of type
+ * "dialogue:message" as animated pulses in the three.js scene.
  */
 class DialogueAgent extends BaseParticipant {
-  constructor(private readonly roleId: string) {
+  /** Public accessor so the dispatch loop can look up agents by role. */
+  readonly roleId: string;
+
+  constructor(
+    roleId: string,
+    private readonly sceneObjects: SceneObjects,
+  ) {
     super();
+    this.roleId = roleId;
   }
 
   override onJoined(): void {
@@ -29,12 +46,92 @@ class DialogueAgent extends BaseParticipant {
   }
 
   override onInternalEvent(event: SemanticEvent<unknown>): void {
-    console.log(`[${this.roleId}] internal event:`, event.getType(), event.data);
+    const data = event.data as Record<string, unknown>;
+    if (event.getType() === "dialogue:message" && data) {
+      const from = data.from as string;
+      const to = data.to as string;
+      const text = data.text as string;
+      const tone = data.tone as string;
+      const pulseColor = TONE_COLORS[tone] ?? 0xffffff;
+
+      // Map role IDs to node indices (must match PARTICIPANT_ROLES order)
+      const roleIndex: Record<string, number> = {
+        "source-community": 0,
+        "artist":           1,
+        "curator":          2,
+        "audience":         3,
+        "mediator":         4,
+      };
+      const fromIdx = roleIndex[from];
+      const toIdx = roleIndex[to];
+      if (fromIdx === undefined || toIdx === undefined) return;
+
+      const { nodes, nodePositions, scene } = this.sceneObjects;
+      const startPos = nodePositions[fromIdx];
+      const endPos = nodePositions[toIdx];
+
+      // Create the pulse sphere
+      const pulseGeom = new THREE.SphereGeometry(0.12, 12, 12);
+      const pulseMat = new THREE.MeshStandardMaterial({
+        color: pulseColor,
+        emissive: pulseColor,
+        emissiveIntensity: 0.6,
+        transparent: true,
+        opacity: 1,
+      });
+      const pulse = new THREE.Mesh(pulseGeom, pulseMat);
+      pulse.position.copy(startPos);
+      scene.add(pulse);
+
+      // Animate the pulse
+      const duration = 1200; // ms
+      const startTime = performance.now();
+
+      const animatePulse = () => {
+        const elapsed = performance.now() - startTime;
+        const t = Math.min(elapsed / duration, 1); // 0 → 1
+
+        // Linear interpolation from start to end
+        pulse.position.lerpVectors(startPos, endPos, t);
+
+        // Fade + shrink in the second half
+        if (t > 0.5) {
+          const fadeT = (t - 0.5) / 0.5; // 0 → 1
+          pulseMat.opacity = 1 - fadeT;
+          const scale = 1 - fadeT * 0.8; // shrink to 20%
+          pulse.scale.setScalar(scale);
+        }
+
+        if (t < 1) {
+          requestAnimationFrame(animatePulse);
+        } else {
+          // Pulse arrived — highlight receiver
+          const receiverNode = nodes[toIdx];
+          if (receiverNode) {
+            receiverNode.scale.setScalar(1.3);
+            setTimeout(() => {
+              receiverNode.scale.setScalar(1);
+            }, 400);
+          }
+
+          // Remove pulse from scene
+          scene.remove(pulse);
+          pulseGeom.dispose();
+          pulseMat.dispose();
+        }
+      };
+
+      requestAnimationFrame(animatePulse);
+
+      // Log to console for debugging
+      console.log(`[${this.roleId}] dialogue:message ${from} → ${to} (${tone}): ${text}`);
+    }
   }
 
   override onExternalEvent(source: unknown, event: SemanticEvent<unknown>): void {
+    const src = source as DialogueAgent;
     console.log(
-      `[${this.roleId}] received external event from ${(source as DialogueAgent).roleId || "unknown"}:`,
+      `[${this.roleId}] received external event from ${src.roleId || "unknown"}:`,
       event.getType(),
       event.data,
     );
@@ -92,68 +189,7 @@ const SCRIPT: Omit<DialogueMessage, "timestamp">[] = [
 
 const MSG_INTERVAL_MS = 1800;
 
-// ── Tone-to-colour mapping (ADR-004) ------------------------------------
-
-const TONE_COLOR: Record<DialogueMessage["tone"], number> = {
-  concern: 0xff5c7a,
-  reflection: 0x66ccff,
-  context: 0xffcc66,
-  question: 0xb28dff,
-  resolution: 0x6ee7a8,
-};
-
-// ── Message log renderer ------------------------------------------------
-
-/**
- * Append a single dialogue message to the #message-log overlay.
- * Each entry shows from → to, the message text, and a tone badge
- * coloured according to ADR-004.
- */
-function appendMessageLog(msg: DialogueMessage): void {
-  const logEl = document.getElementById("message-log");
-  if (!logEl) return;
-
-  // Remove the "Loading…" placeholder if present
-  const placeholder = logEl.querySelector("em");
-  if (placeholder) placeholder.remove();
-
-  const entry = document.createElement("div");
-  entry.style.cssText = `
-    display: flex; align-items: flex-start; gap: 8px;
-    padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.08);
-    font-size: 0.82rem; line-height: 1.4;
-  `;
-
-  // Tone badge
-  const badge = document.createElement("span");
-  const toneHex = `#${TONE_COLOR[msg.tone].toString(16).padStart(6, "0")}`;
-  badge.style.cssText = `
-    flex-shrink: 0; display: inline-block;
-    padding: 1px 8px; border-radius: 10px;
-    font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
-    background: ${toneHex}; color: #000;
-  `;
-  badge.textContent = msg.tone;
-
-  // Body
-  const body = document.createElement("span");
-  body.style.cssText = `flex: 1; color: #ddd;`;
-  body.innerHTML = `<strong style="color:#fff;">${msg.from}</strong> → <strong style="color:#fff;">${msg.to}</strong>: ${msg.text}`;
-
-  entry.appendChild(badge);
-  entry.appendChild(body);
-  logEl.appendChild(entry);
-
-  // Auto-scroll to bottom
-  logEl.scrollTop = logEl.scrollHeight;
-
-  // Prune older entries beyond a comfortable scroll buffer (keep ~50)
-  while (logEl.children.length > 50) {
-    logEl.removeChild(logEl.firstChild!);
-  }
-}
-
-// ── Scene helpers (minimal) --------------------------------------------
+// ── Scene helpers -------------------------------------------------------
 
 const PARTICIPANT_COUNT = 5;
 const CIRCLE_RADIUS = 2.5;
@@ -164,6 +200,7 @@ interface SceneObjects {
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
   nodes: THREE.Mesh[];
+  nodePositions: THREE.Vector3[];
   lines: THREE.LineSegments;
 }
 
@@ -243,7 +280,7 @@ function createScene(): SceneObjects {
   const lines = new THREE.LineSegments(lineGeometry, lineMaterial);
   scene.add(lines);
 
-  return { scene, camera, renderer, nodes, lines };
+  return { scene, camera, renderer, nodes, nodePositions, lines };
 }
 
 function animate(
@@ -279,66 +316,79 @@ function handleResize(
   });
 }
 
+// ── Dialogue dispatch ---------------------------------------------------
+
+const PARTICIPANT_ROLES = [
+  "source-community",
+  "artist",
+  "curator",
+  "audience",
+  "mediator",
+];
+
+function startDialogue(
+  env: AgenticEnvironment,
+  agents: DialogueAgent[],
+): void {
+  const roleToAgent: Record<string, DialogueAgent> = {};
+  agents.forEach((a) => {
+    roleToAgent[a.roleId] = a;
+  });
+
+  let scriptIndex = 0;
+
+  function sendNext(): void {
+    const msg = SCRIPT[scriptIndex];
+    const targetAgent = roleToAgent[msg.to];
+    if (!targetAgent) {
+      scriptIndex = (scriptIndex + 1) % SCRIPT.length;
+      setTimeout(sendNext, MSG_INTERVAL_MS);
+      return;
+    }
+
+    const event = new SemanticEvent("dialogue:message", {
+      from: msg.from,
+      to: msg.to,
+      text: msg.text,
+      tone: msg.tone,
+      timestamp: Date.now(),
+    });
+    env.deliverSemanticEvent(targetAgent, event);
+
+    scriptIndex = (scriptIndex + 1) % SCRIPT.length;
+    setTimeout(sendNext, MSG_INTERVAL_MS);
+  }
+
+  // Start after a brief pause
+  setTimeout(sendNext, 1000);
+}
+
 // ── Main -----------------------------------------------------------------
 
 function main(): void {
   // Set up the mozaik reactive environment
   const env = new AgenticEnvironment("cultural-appropriation-dialogue");
 
-  // Create one DialogueAgent per role and subscribe them all
-  const roleIds = [
-    "source-community",
-    "artist",
-    "curator",
-    "audience",
-    "mediator",
-  ];
-  const agents: Record<string, DialogueAgent> = {};
-  for (const id of roleIds) {
-    const agent = new DialogueAgent(id);
-    agents[id] = agent;
-    env.subscribe(agent);
-  }
-
   // three.js scene
-  const { scene, camera, renderer, nodes, lines } = createScene();
-  document.body.appendChild(renderer.domElement);
-  handleResize(camera, renderer);
-  animate(scene, camera, renderer, nodes, lines);
+  const sceneObjects = createScene();
+  document.body.appendChild(sceneObjects.renderer.domElement);
+  handleResize(sceneObjects.camera, sceneObjects.renderer);
+  animate(
+    sceneObjects.scene,
+    sceneObjects.camera,
+    sceneObjects.renderer,
+    sceneObjects.nodes,
+    sceneObjects.lines,
+  );
 
-  // Run the fixed dialogue script, looping forever
-  let scriptIndex = 0;
+  // Create dialogue agents and subscribe them
+  const agents = PARTICIPANT_ROLES.map(
+    (role) => new DialogueAgent(role, sceneObjects),
+  );
+  agents.forEach((agent) => env.subscribe(agent));
 
-  function dispatchNext(): void {
-    const raw = SCRIPT[scriptIndex];
-    scriptIndex = (scriptIndex + 1) % SCRIPT.length;
-
-    const msg: DialogueMessage = {
-      ...raw,
-      timestamp: Date.now(),
-    };
-
-    // Build a SemanticEvent and deliver it to the target agent
-    const event = new SemanticEvent("dialogue:message", {
-      from: msg.from,
-      to: msg.to,
-      text: msg.text,
-      tone: msg.tone,
-      timestamp: msg.timestamp,
-    });
-
-    const targetAgent = agents[msg.to];
-    if (targetAgent) {
-      env.deliverSemanticEvent(targetAgent, event);
-    }
-
-    // Render to the DOM overlay
-    appendMessageLog(msg);
-
-    setTimeout(dispatchNext, MSG_INTERVAL_MS);
-  }
-
-  dispatchNext();
+  // Start the dialogue loop
+  startDialogue(env, agents);
 }
 
 // Only run in a browser-like environment (document exists)
