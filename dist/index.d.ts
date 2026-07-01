@@ -8,32 +8,28 @@
 import * as THREE from "three";
 import { BaseParticipant, SemanticEvent } from "@mozaik-ai/core";
 /**
- * A dialogue participant that logs / renders semantic events of type
- * "dialogue:message" sent through the AgenticEnvironment.
+ * A dialogue participant that renders semantic events of type
+ * "dialogue:message" as animated pulses in the three.js scene.
  */
 declare class DialogueAgent extends BaseParticipant {
-    private readonly roleId;
-    constructor(roleId: string);
+    private readonly sceneObjects;
+    /** Public accessor so the dispatch loop can look up agents by role. */
+    readonly roleId: string;
+    constructor(roleId: string, sceneObjects: SceneObjects);
     onJoined(): void;
     onInternalEvent(event: SemanticEvent<unknown>): void;
     onExternalEvent(source: unknown, event: SemanticEvent<unknown>): void;
-}
-interface DialogueMessage {
-    from: string;
-    to: string;
-    text: string;
-    tone: "concern" | "reflection" | "context" | "question" | "resolution";
-    timestamp: number;
 }
 interface SceneObjects {
     scene: THREE.Scene;
     camera: THREE.PerspectiveCamera;
     renderer: THREE.WebGLRenderer;
     nodes: THREE.Mesh[];
+    nodePositions: THREE.Vector3[];
     lines: THREE.LineSegments;
 }
 declare function createScene(): SceneObjects;
 declare function animate(scene: THREE.Scene, camera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer, nodes: THREE.Mesh[], lines: THREE.LineSegments): void;
 declare function handleResize(camera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer): void;
 declare function main(): void;
-export { VisualizerAgent, createScene, animate, handleResize, main };
+export { DialogueAgent, createScene, animate, handleResize, main };
