@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>mozaik-treejs</title>
+    <title>Mozaik Cultural Dialogue</title>
     <style>
       * {
         margin: 0;
@@ -16,9 +16,71 @@
         height: 100%;
         overflow: hidden;
       }
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+      #app-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+          Helvetica, Arial, sans-serif;
+        color: #fff;
+        user-select: none;
+      }
+      #dialogue-title {
+        position: absolute;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 1.1rem;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+        background: rgba(0, 0, 0, 0.25);
+        padding: 6px 18px;
+        border-radius: 20px;
+        backdrop-filter: blur(4px);
+        white-space: nowrap;
+      }
+      #message-log {
+        position: absolute;
+        bottom: 30px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: min(90%, 640px);
+        max-height: 180px;
+        overflow-y: auto;
+        background: rgba(0, 0, 0, 0.45);
+        backdrop-filter: blur(6px);
+        border-radius: 12px;
+        padding: 12px 16px;
+        font-size: 0.85rem;
+        line-height: 1.5;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+        pointer-events: auto;
+      }
+      #message-log::-webkit-scrollbar {
+        width: 4px;
+      }
+      #message-log::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.25);
+        border-radius: 2px;
+      }
     </style>
   </head>
   <body>
+    <div id="app-overlay">
+      <div id="dialogue-title">Cultural Appropriation — Communication Simulation</div>
+      <div id="message-log">
+        <em>Loading dialogue…</em>
+      </div>
+    </div>
     <script type="module" src="/src/index.ts"></script>
   </body>
 </html>
