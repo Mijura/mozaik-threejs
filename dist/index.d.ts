@@ -1,9 +1,9 @@
 /**
- * mozaik-treejs — Cultural-appropriation dialogue simulation
+ * mozaik-treejs — Communication network visualization using three.js
+ * and @mozaik-ai/core.
  *
- * Uses @mozaik-ai/core to run a fixed script about cultural appropriation
- * among five perspectives (source-community, artist, curator, audience,
- * mediator) and visualises the communication with three.js.
+ * Replaces the original spinning cube demo with a spherical participant
+ * node layout, connection lines, and animated communication visuals.
  */
 import * as THREE from "three";
 import { BaseParticipant, SemanticEvent } from "@mozaik-ai/core";
@@ -25,12 +25,15 @@ interface DialogueMessage {
     tone: "concern" | "reflection" | "context" | "question" | "resolution";
     timestamp: number;
 }
-declare function createScene(): {
+interface SceneObjects {
     scene: THREE.Scene;
     camera: THREE.PerspectiveCamera;
     renderer: THREE.WebGLRenderer;
-};
-declare function animate(scene: THREE.Scene, camera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer): void;
+    nodes: THREE.Mesh[];
+    lines: THREE.LineSegments;
+}
+declare function createScene(): SceneObjects;
+declare function animate(scene: THREE.Scene, camera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer, nodes: THREE.Mesh[], lines: THREE.LineSegments): void;
+declare function handleResize(camera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer): void;
 declare function main(): void;
-export { DialogueAgent, createScene, animate, main };
-export type { DialogueMessage };
+export { VisualizerAgent, createScene, animate, handleResize, main };

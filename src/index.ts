@@ -1,9 +1,9 @@
 /**
- * mozaik-treejs — Cultural-appropriation dialogue simulation
+ * mozaik-treejs — Communication network visualization using three.js
+ * and @mozaik-ai/core.
  *
- * Uses @mozaik-ai/core to run a fixed script about cultural appropriation
- * among five perspectives (source-community, artist, curator, audience,
- * mediator) and visualises the communication with three.js.
+ * Replaces the original spinning cube demo with a spherical participant
+ * node layout, connection lines, and animated communication visuals.
  */
 
 import * as THREE from "three";
@@ -94,26 +94,36 @@ const MSG_INTERVAL_MS = 1800;
 
 // ── Scene helpers (minimal) --------------------------------------------
 
-function createScene(): {
+const PARTICIPANT_COUNT = 5;
+const CIRCLE_RADIUS = 2.5;
+const NODE_RADIUS = 0.35;
+
+interface SceneObjects {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
-} {
+  nodes: THREE.Mesh[];
+  lines: THREE.LineSegments;
+}
+
+function createScene(): SceneObjects {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x111122);
 
   const camera = new THREE.PerspectiveCamera(
-    75,
+    60,
     window.innerWidth / window.innerHeight,
     0.1,
     1000,
   );
-  camera.position.z = 3;
+  camera.position.set(0, 1.5, 5);
+  camera.lookAt(0, 0, 0);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(window.devicePixelRatio);
 
+  // Lights
   const ambientLight = new THREE.AmbientLight(0x404060);
   scene.add(ambientLight);
 
@@ -121,19 +131,91 @@ function createScene(): {
   directionalLight.position.set(1, 2, 3);
   scene.add(directionalLight);
 
-  return { scene, camera, renderer };
+  const fillLight = new THREE.DirectionalLight(0x4466ff, 0.5);
+  fillLight.position.set(-1, -0.5, -1);
+  scene.add(fillLight);
+
+  // Participant nodes arranged in a circle
+  const nodeGeometry = new THREE.SphereGeometry(NODE_RADIUS, 24, 24);
+  const nodeMaterial = new THREE.MeshStandardMaterial({
+    color: 0x66ccff,
+    metalness: 0.2,
+    roughness: 0.6,
+  });
+
+  const nodes: THREE.Mesh[] = [];
+  const nodePositions: THREE.Vector3[] = [];
+
+  for (let i = 0; i < PARTICIPANT_COUNT; i++) {
+    const angle = (i / PARTICIPANT_COUNT) * Math.PI * 2;
+    const x = Math.cos(angle) * CIRCLE_RADIUS;
+    const z = Math.sin(angle) * CIRCLE_RADIUS;
+
+    const node = new THREE.Mesh(nodeGeometry, nodeMaterial.clone());
+    node.position.set(x, 0, z);
+    scene.add(node);
+    nodes.push(node);
+    nodePositions.push(node.position.clone());
+  }
+
+  // Connection lines between every pair of nodes
+  const linePositions: number[] = [];
+  for (let i = 0; i < PARTICIPANT_COUNT; i++) {
+    for (let j = i + 1; j < PARTICIPANT_COUNT; j++) {
+      const p1 = nodePositions[i];
+      const p2 = nodePositions[j];
+      linePositions.push(p1.x, p1.y, p1.z);
+      linePositions.push(p2.x, p2.y, p2.z);
+    }
+  }
+
+  const lineGeometry = new THREE.BufferGeometry();
+  lineGeometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(linePositions, 3),
+  );
+  const lineMaterial = new THREE.LineBasicMaterial({
+    color: 0x444466,
+    transparent: true,
+    opacity: 0.4,
+  });
+  const lines = new THREE.LineSegments(lineGeometry, lineMaterial);
+  scene.add(lines);
+
+  return { scene, camera, renderer, nodes, lines };
 }
 
 function animate(
   scene: THREE.Scene,
   camera: THREE.PerspectiveCamera,
   renderer: THREE.WebGLRenderer,
+  nodes: THREE.Mesh[],
+  lines: THREE.LineSegments,
 ): void {
   function frame() {
     requestAnimationFrame(frame);
+
+    // Gentle floating motion for nodes
+    const time = Date.now() * 0.001;
+    nodes.forEach((node, i) => {
+      const offset = i * 1.2;
+      node.position.y = Math.sin(time + offset) * 0.1;
+    });
+
     renderer.render(scene, camera);
   }
   frame();
+}
+
+function handleResize(
+  camera: THREE.PerspectiveCamera,
+  renderer: THREE.WebGLRenderer,
+): void {
+  window.addEventListener("resize", () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
 }
 
 // ── Main -----------------------------------------------------------------
@@ -142,45 +224,29 @@ function main(): void {
   // Set up the mozaik reactive environment
   const env = new AgenticEnvironment("cultural-appropriation-dialogue");
 
-  // ── Create & subscribe dialogue agents ──────────────────────────────
-  const agentIds = ["source-community", "artist", "curator", "audience", "mediator"];
-  const agents: Record<string, DialogueAgent> = {};
-  for (const id of agentIds) {
-    const agent = new DialogueAgent(id);
-    agents[id] = agent;
-    env.subscribe(agent);
-  }
+  const agent = new VisualizerAgent("SceneWatcher");
+  env.subscribe(agent);
 
-  // ── Fixed dialogue loop ──────────────────────────────────────────────
-  let scriptIndex = 0;
+  // Fire a semantic event that the agent logs
+  const startEvent = new SemanticEvent("scene:started", {
+    timestamp: Date.now(),
+  });
+  env.deliverSemanticEvent(agent, startEvent);
 
-  function dispatchNextMessage(): void {
-    const entry = SCRIPT[scriptIndex];
-    const sender = agents[entry.from];
-    const recipient = agents[entry.to];
-
-    if (sender && recipient) {
-      const event = new SemanticEvent<DialogueMessage>("dialogue:message", {
-        from: entry.from,
-        to: entry.to,
-        text: entry.text,
-        tone: entry.tone,
-        timestamp: Date.now(),
-      });
-      env.deliverSemanticEvent(recipient, event);
-    }
-
-    scriptIndex = (scriptIndex + 1) % SCRIPT.length;
-    setTimeout(dispatchNextMessage, MSG_INTERVAL_MS);
-  }
-
-  // Start after a short initial pause
-  setTimeout(dispatchNextMessage, MSG_INTERVAL_MS);
-
-  // ── three.js scene (placeholder — visualisation added by later stories) ──
-  const { scene, camera, renderer } = createScene();
+  // three.js scene
+  const { scene, camera, renderer, nodes, lines } = createScene();
   document.body.appendChild(renderer.domElement);
-  animate(scene, camera, renderer);
+  handleResize(camera, renderer);
+  animate(scene, camera, renderer, nodes, lines);
+
+  // Send a message after a short delay to demonstrate message delivery
+  setTimeout(() => {
+    const msgEvent = new SemanticEvent("scene:tick", {
+      message: "Network visualization is running",
+      timestamp: Date.now(),
+    });
+    env.deliverSemanticEvent(agent, msgEvent);
+  }, 2000);
 }
 
 // Only run in a browser-like environment (document exists)
@@ -188,5 +254,4 @@ if (typeof document !== "undefined" && document.body) {
   main();
 }
 
-export { DialogueAgent, createScene, animate, main };
-export type { DialogueMessage };
+export { VisualizerAgent, createScene, animate, handleResize, main };
