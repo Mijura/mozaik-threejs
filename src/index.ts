@@ -92,6 +92,67 @@ const SCRIPT: Omit<DialogueMessage, "timestamp">[] = [
 
 const MSG_INTERVAL_MS = 1800;
 
+// ── Tone-to-colour mapping (ADR-004) ------------------------------------
+
+const TONE_COLOR: Record<DialogueMessage["tone"], number> = {
+  concern: 0xff5c7a,
+  reflection: 0x66ccff,
+  context: 0xffcc66,
+  question: 0xb28dff,
+  resolution: 0x6ee7a8,
+};
+
+// ── Message log renderer ------------------------------------------------
+
+/**
+ * Append a single dialogue message to the #message-log overlay.
+ * Each entry shows from → to, the message text, and a tone badge
+ * coloured according to ADR-004.
+ */
+function appendMessageLog(msg: DialogueMessage): void {
+  const logEl = document.getElementById("message-log");
+  if (!logEl) return;
+
+  // Remove the "Loading…" placeholder if present
+  const placeholder = logEl.querySelector("em");
+  if (placeholder) placeholder.remove();
+
+  const entry = document.createElement("div");
+  entry.style.cssText = `
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.08);
+    font-size: 0.82rem; line-height: 1.4;
+  `;
+
+  // Tone badge
+  const badge = document.createElement("span");
+  const toneHex = `#${TONE_COLOR[msg.tone].toString(16).padStart(6, "0")}`;
+  badge.style.cssText = `
+    flex-shrink: 0; display: inline-block;
+    padding: 1px 8px; border-radius: 10px;
+    font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
+    background: ${toneHex}; color: #000;
+  `;
+  badge.textContent = msg.tone;
+
+  // Body
+  const body = document.createElement("span");
+  body.style.cssText = `flex: 1; color: #ddd;`;
+  body.innerHTML = `<strong style="color:#fff;">${msg.from}</strong> → <strong style="color:#fff;">${msg.to}</strong>: ${msg.text}`;
+
+  entry.appendChild(badge);
+  entry.appendChild(body);
+  logEl.appendChild(entry);
+
+  // Auto-scroll to bottom
+  logEl.scrollTop = logEl.scrollHeight;
+
+  // Prune older entries beyond a comfortable scroll buffer (keep ~50)
+  while (logEl.children.length > 50) {
+    logEl.removeChild(logEl.firstChild!);
+  }
+}
+
 // ── Scene helpers (minimal) --------------------------------------------
 
 const PARTICIPANT_COUNT = 5;
@@ -224,14 +285,20 @@ function main(): void {
   // Set up the mozaik reactive environment
   const env = new AgenticEnvironment("cultural-appropriation-dialogue");
 
-  const agent = new VisualizerAgent("SceneWatcher");
-  env.subscribe(agent);
-
-  // Fire a semantic event that the agent logs
-  const startEvent = new SemanticEvent("scene:started", {
-    timestamp: Date.now(),
-  });
-  env.deliverSemanticEvent(agent, startEvent);
+  // Create one DialogueAgent per role and subscribe them all
+  const roleIds = [
+    "source-community",
+    "artist",
+    "curator",
+    "audience",
+    "mediator",
+  ];
+  const agents: Record<string, DialogueAgent> = {};
+  for (const id of roleIds) {
+    const agent = new DialogueAgent(id);
+    agents[id] = agent;
+    env.subscribe(agent);
+  }
 
   // three.js scene
   const { scene, camera, renderer, nodes, lines } = createScene();
@@ -239,14 +306,39 @@ function main(): void {
   handleResize(camera, renderer);
   animate(scene, camera, renderer, nodes, lines);
 
-  // Send a message after a short delay to demonstrate message delivery
-  setTimeout(() => {
-    const msgEvent = new SemanticEvent("scene:tick", {
-      message: "Network visualization is running",
+  // Run the fixed dialogue script, looping forever
+  let scriptIndex = 0;
+
+  function dispatchNext(): void {
+    const raw = SCRIPT[scriptIndex];
+    scriptIndex = (scriptIndex + 1) % SCRIPT.length;
+
+    const msg: DialogueMessage = {
+      ...raw,
       timestamp: Date.now(),
+    };
+
+    // Build a SemanticEvent and deliver it to the target agent
+    const event = new SemanticEvent("dialogue:message", {
+      from: msg.from,
+      to: msg.to,
+      text: msg.text,
+      tone: msg.tone,
+      timestamp: msg.timestamp,
     });
-    env.deliverSemanticEvent(agent, msgEvent);
-  }, 2000);
+
+    const targetAgent = agents[msg.to];
+    if (targetAgent) {
+      env.deliverSemanticEvent(targetAgent, event);
+    }
+
+    // Render to the DOM overlay
+    appendMessageLog(msg);
+
+    setTimeout(dispatchNext, MSG_INTERVAL_MS);
+  }
+
+  dispatchNext();
 }
 
 // Only run in a browser-like environment (document exists)
@@ -254,4 +346,4 @@ if (typeof document !== "undefined" && document.body) {
   main();
 }
 
-export { VisualizerAgent, createScene, animate, handleResize, main };
+export { DialogueAgent, createScene, animate, handleResize, main };
