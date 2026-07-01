@@ -1,9 +1,9 @@
 /**
- * mozaik-treejs — A small example combining three.js visualization
- * with @mozaik-ai/core reactive agents.
+ * mozaik-treejs — Communication network visualization using three.js
+ * and @mozaik-ai/core.
  *
- * Spinning cube scene + an agent that logs lifecycle events to the
- * browser console (or Node stdout if run headless).
+ * Replaces the original spinning cube demo with a spherical participant
+ * node layout, connection lines, and animated communication visuals.
  */
 import * as THREE from "three";
 import { AgenticEnvironment, BaseParticipant, SemanticEvent, } from "@mozaik-ai/core";
@@ -25,58 +25,108 @@ class VisualizerAgent extends BaseParticipant {
     }
 }
 // ── Scene helpers -------------------------------------------------------
+const PARTICIPANT_COUNT = 5;
+const CIRCLE_RADIUS = 2.5;
+const NODE_RADIUS = 0.35;
 function createScene() {
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x111122);
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.z = 3;
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 1.5, 5);
+    camera.lookAt(0, 0, 0);
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
-    const geometry = new THREE.BoxGeometry(1, 1, 1);
-    const material = new THREE.MeshStandardMaterial({
-        color: 0x44aaff,
-        metalness: 0.3,
-        roughness: 0.4,
-    });
-    const cube = new THREE.Mesh(geometry, material);
-    scene.add(cube);
+    // Lights
     const ambientLight = new THREE.AmbientLight(0x404060);
     scene.add(ambientLight);
     const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
     directionalLight.position.set(1, 2, 3);
     scene.add(directionalLight);
-    return { scene, camera, renderer, cube };
+    const fillLight = new THREE.DirectionalLight(0x4466ff, 0.5);
+    fillLight.position.set(-1, -0.5, -1);
+    scene.add(fillLight);
+    // Participant nodes arranged in a circle
+    const nodeGeometry = new THREE.SphereGeometry(NODE_RADIUS, 24, 24);
+    const nodeMaterial = new THREE.MeshStandardMaterial({
+        color: 0x66ccff,
+        metalness: 0.2,
+        roughness: 0.6,
+    });
+    const nodes = [];
+    const nodePositions = [];
+    for (let i = 0; i < PARTICIPANT_COUNT; i++) {
+        const angle = (i / PARTICIPANT_COUNT) * Math.PI * 2;
+        const x = Math.cos(angle) * CIRCLE_RADIUS;
+        const z = Math.sin(angle) * CIRCLE_RADIUS;
+        const node = new THREE.Mesh(nodeGeometry, nodeMaterial.clone());
+        node.position.set(x, 0, z);
+        scene.add(node);
+        nodes.push(node);
+        nodePositions.push(node.position.clone());
+    }
+    // Connection lines between every pair of nodes
+    const linePositions = [];
+    for (let i = 0; i < PARTICIPANT_COUNT; i++) {
+        for (let j = i + 1; j < PARTICIPANT_COUNT; j++) {
+            const p1 = nodePositions[i];
+            const p2 = nodePositions[j];
+            linePositions.push(p1.x, p1.y, p1.z);
+            linePositions.push(p2.x, p2.y, p2.z);
+        }
+    }
+    const lineGeometry = new THREE.BufferGeometry();
+    lineGeometry.setAttribute("position", new THREE.Float32BufferAttribute(linePositions, 3));
+    const lineMaterial = new THREE.LineBasicMaterial({
+        color: 0x444466,
+        transparent: true,
+        opacity: 0.4,
+    });
+    const lines = new THREE.LineSegments(lineGeometry, lineMaterial);
+    scene.add(lines);
+    return { scene, camera, renderer, nodes, lines };
 }
-function animate(scene, camera, renderer, cube) {
+function animate(scene, camera, renderer, nodes, lines) {
     function frame() {
         requestAnimationFrame(frame);
-        cube.rotation.x += 0.01;
-        cube.rotation.y += 0.012;
+        // Gentle floating motion for nodes
+        const time = Date.now() * 0.001;
+        nodes.forEach((node, i) => {
+            const offset = i * 1.2;
+            node.position.y = Math.sin(time + offset) * 0.1;
+        });
         renderer.render(scene, camera);
     }
     frame();
 }
+function handleResize(camera, renderer) {
+    window.addEventListener("resize", () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+}
 // ── Main -----------------------------------------------------------------
 function main() {
     // Set up the mozaik reactive environment
-    const env = new AgenticEnvironment("three-demo");
-    const agent = new VisualizerAgent("CubeWatcher");
+    const env = new AgenticEnvironment("cultural-appropriation-dialogue");
+    const agent = new VisualizerAgent("SceneWatcher");
     env.subscribe(agent);
     // Fire a semantic event that the agent logs
-    const startEvent = new SemanticEvent("visualizer:started", {
+    const startEvent = new SemanticEvent("scene:started", {
         timestamp: Date.now(),
     });
     env.deliverSemanticEvent(agent, startEvent);
     // three.js scene
-    const { scene, camera, renderer, cube } = createScene();
+    const { scene, camera, renderer, nodes, lines } = createScene();
     document.body.appendChild(renderer.domElement);
-    animate(scene, camera, renderer, cube);
+    handleResize(camera, renderer);
+    animate(scene, camera, renderer, nodes, lines);
     // Send a message after a short delay to demonstrate message delivery
     setTimeout(() => {
-        const msgEvent = new SemanticEvent("visualizer:tick", {
-            message: "Cube is spinning",
-            rotation: cube.rotation,
+        const msgEvent = new SemanticEvent("scene:tick", {
+            message: "Network visualization is running",
+            timestamp: Date.now(),
         });
         env.deliverSemanticEvent(agent, msgEvent);
     }, 2000);
@@ -85,5 +135,5 @@ function main() {
 if (typeof document !== "undefined" && document.body) {
     main();
 }
-export { VisualizerAgent, createScene, animate, main };
+export { VisualizerAgent, createScene, animate, handleResize, main };
 //# sourceMappingURL=index.js.map

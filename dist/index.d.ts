@@ -1,9 +1,9 @@
 /**
- * mozaik-treejs — A small example combining three.js visualization
- * with @mozaik-ai/core reactive agents.
+ * mozaik-treejs — Communication network visualization using three.js
+ * and @mozaik-ai/core.
  *
- * Spinning cube scene + an agent that logs lifecycle events to the
- * browser console (or Node stdout if run headless).
+ * Replaces the original spinning cube demo with a spherical participant
+ * node layout, connection lines, and animated communication visuals.
  */
 import * as THREE from "three";
 import { BaseParticipant, SemanticEvent } from "@mozaik-ai/core";
@@ -14,12 +14,15 @@ declare class VisualizerAgent extends BaseParticipant {
     onMessage(message: string): void;
     onInternalEvent(event: SemanticEvent<unknown>): void;
 }
-declare function createScene(): {
+interface SceneObjects {
     scene: THREE.Scene;
     camera: THREE.PerspectiveCamera;
     renderer: THREE.WebGLRenderer;
-    cube: THREE.Mesh;
-};
-declare function animate(scene: THREE.Scene, camera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer, cube: THREE.Mesh): void;
+    nodes: THREE.Mesh[];
+    lines: THREE.LineSegments;
+}
+declare function createScene(): SceneObjects;
+declare function animate(scene: THREE.Scene, camera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer, nodes: THREE.Mesh[], lines: THREE.LineSegments): void;
+declare function handleResize(camera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer): void;
 declare function main(): void;
-export { VisualizerAgent, createScene, animate, main };
+export { VisualizerAgent, createScene, animate, handleResize, main };
