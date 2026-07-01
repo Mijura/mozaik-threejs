@@ -46,15 +46,15 @@ function createScene(): {
 
   const camera = new THREE.PerspectiveCamera(
     75,
-    globalThis.innerWidth / globalThis.innerHeight,
+    window.innerWidth / window.innerHeight,
     0.1,
     1000,
   );
   camera.position.z = 3;
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(globalThis.innerWidth, globalThis.innerHeight);
-  renderer.setPixelRatio(globalThis.devicePixelRatio);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(window.devicePixelRatio);
 
   const geometry = new THREE.BoxGeometry(1, 1, 1);
   const material = new THREE.MeshStandardMaterial({

@@ -28,11 +28,11 @@ class VisualizerAgent extends BaseParticipant {
 function createScene() {
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x111122);
-    const camera = new THREE.PerspectiveCamera(75, globalThis.innerWidth / globalThis.innerHeight, 0.1, 1000);
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     camera.position.z = 3;
     const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(globalThis.innerWidth, globalThis.innerHeight);
-    renderer.setPixelRatio(globalThis.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
     const geometry = new THREE.BoxGeometry(1, 1, 1);
     const material = new THREE.MeshStandardMaterial({
         color: 0x44aaff,
