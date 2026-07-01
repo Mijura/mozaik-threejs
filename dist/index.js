@@ -1,30 +1,73 @@
 /**
- * mozaik-treejs — A small example combining three.js visualization
- * with @mozaik-ai/core reactive agents.
+ * mozaik-treejs — Cultural-appropriation dialogue simulation
  *
- * Spinning cube scene + an agent that logs lifecycle events to the
- * browser console (or Node stdout if run headless).
+ * Uses @mozaik-ai/core to run a fixed script about cultural appropriation
+ * among five perspectives (source-community, artist, curator, audience,
+ * mediator) and visualises the communication with three.js.
  */
 import * as THREE from "three";
 import { AgenticEnvironment, BaseParticipant, SemanticEvent, } from "@mozaik-ai/core";
 // ── Agent ---------------------------------------------------------------
-class VisualizerAgent extends BaseParticipant {
-    label;
-    constructor(label) {
+/**
+ * A dialogue participant that logs / renders semantic events of type
+ * "dialogue:message" sent through the AgenticEnvironment.
+ */
+class DialogueAgent extends BaseParticipant {
+    roleId;
+    constructor(roleId) {
         super();
-        this.label = label;
+        this.roleId = roleId;
     }
     onJoined() {
-        console.log(`[${this.label}] joined the environment`);
-    }
-    onMessage(message) {
-        console.log(`[${this.label}] received message:`, message);
+        console.log(`[${this.roleId}] joined the environment`);
     }
     onInternalEvent(event) {
-        console.log(`[${this.label}] internal event:`, event.getType(), event.data);
+        console.log(`[${this.roleId}] internal event:`, event.getType(), event.data);
+    }
+    onExternalEvent(source, event) {
+        console.log(`[${this.roleId}] received external event from ${source.roleId || "unknown"}:`, event.getType(), event.data);
     }
 }
-// ── Scene helpers -------------------------------------------------------
+const SCRIPT = [
+    {
+        from: "source-community",
+        to: "artist",
+        tone: "concern",
+        text: "This symbol carries lived history for our community; using it without context can cause harm.",
+    },
+    {
+        from: "artist",
+        to: "source-community",
+        tone: "reflection",
+        text: "I hear that concern. I need to understand the origin and ask whether collaboration is appropriate.",
+    },
+    {
+        from: "curator",
+        to: "audience",
+        tone: "context",
+        text: "The difference between appreciation and appropriation often depends on consent, credit, power, and benefit.",
+    },
+    {
+        from: "audience",
+        to: "mediator",
+        tone: "question",
+        text: "How can viewers respond respectfully when they encounter contested cultural imagery?",
+    },
+    {
+        from: "mediator",
+        to: "artist",
+        tone: "resolution",
+        text: "Begin with consent, compensate contributors, credit sources, and be willing to change or withdraw the work.",
+    },
+    {
+        from: "mediator",
+        to: "source-community",
+        tone: "resolution",
+        text: "The process should center the affected community's voice rather than treating culture as decoration.",
+    },
+];
+const MSG_INTERVAL_MS = 1800;
+// ── Scene helpers (minimal) --------------------------------------------
 function createScene() {
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x111122);
@@ -33,26 +76,16 @@ function createScene() {
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
-    const geometry = new THREE.BoxGeometry(1, 1, 1);
-    const material = new THREE.MeshStandardMaterial({
-        color: 0x44aaff,
-        metalness: 0.3,
-        roughness: 0.4,
-    });
-    const cube = new THREE.Mesh(geometry, material);
-    scene.add(cube);
     const ambientLight = new THREE.AmbientLight(0x404060);
     scene.add(ambientLight);
     const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
     directionalLight.position.set(1, 2, 3);
     scene.add(directionalLight);
-    return { scene, camera, renderer, cube };
+    return { scene, camera, renderer };
 }
-function animate(scene, camera, renderer, cube) {
+function animate(scene, camera, renderer) {
     function frame() {
         requestAnimationFrame(frame);
-        cube.rotation.x += 0.01;
-        cube.rotation.y += 0.012;
         renderer.render(scene, camera);
     }
     frame();
@@ -60,30 +93,44 @@ function animate(scene, camera, renderer, cube) {
 // ── Main -----------------------------------------------------------------
 function main() {
     // Set up the mozaik reactive environment
-    const env = new AgenticEnvironment("three-demo");
-    const agent = new VisualizerAgent("CubeWatcher");
-    env.subscribe(agent);
-    // Fire a semantic event that the agent logs
-    const startEvent = new SemanticEvent("visualizer:started", {
-        timestamp: Date.now(),
-    });
-    env.deliverSemanticEvent(agent, startEvent);
-    // three.js scene
-    const { scene, camera, renderer, cube } = createScene();
+    const env = new AgenticEnvironment("cultural-appropriation-dialogue");
+    // ── Create & subscribe dialogue agents ──────────────────────────────
+    const agentIds = ["source-community", "artist", "curator", "audience", "mediator"];
+    const agents = {};
+    for (const id of agentIds) {
+        const agent = new DialogueAgent(id);
+        agents[id] = agent;
+        env.subscribe(agent);
+    }
+    // ── Fixed dialogue loop ──────────────────────────────────────────────
+    let scriptIndex = 0;
+    function dispatchNextMessage() {
+        const entry = SCRIPT[scriptIndex];
+        const sender = agents[entry.from];
+        const recipient = agents[entry.to];
+        if (sender && recipient) {
+            const event = new SemanticEvent("dialogue:message", {
+                from: entry.from,
+                to: entry.to,
+                text: entry.text,
+                tone: entry.tone,
+                timestamp: Date.now(),
+            });
+            env.deliverSemanticEvent(recipient, event);
+        }
+        scriptIndex = (scriptIndex + 1) % SCRIPT.length;
+        setTimeout(dispatchNextMessage, MSG_INTERVAL_MS);
+    }
+    // Start after a short initial pause
+    setTimeout(dispatchNextMessage, MSG_INTERVAL_MS);
+    // ── three.js scene (placeholder — visualisation added by later stories) ──
+    const { scene, camera, renderer } = createScene();
     document.body.appendChild(renderer.domElement);
-    animate(scene, camera, renderer, cube);
-    // Send a message after a short delay to demonstrate message delivery
-    setTimeout(() => {
-        const msgEvent = new SemanticEvent("visualizer:tick", {
-            message: "Cube is spinning",
-            rotation: cube.rotation,
-        });
-        env.deliverSemanticEvent(agent, msgEvent);
-    }, 2000);
+    animate(scene, camera, renderer);
 }
 // Only run in a browser-like environment (document exists)
 if (typeof document !== "undefined" && document.body) {
     main();
 }
-export { VisualizerAgent, createScene, animate, main };
+export { DialogueAgent, createScene, animate, main };
 //# sourceMappingURL=index.js.map
