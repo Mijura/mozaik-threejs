@@ -4,12 +4,22 @@ A minimal example combining [three.js](https://threejs.org/) visualization with 
 
 ## Usage
 
+### Run in the browser (development)
+
 ```bash
 npm install
+npm run dev
+```
+
+Vite will print a local URL, typically `http://localhost:5173/`. Open it in a browser to see the spinning cube while mozaik lifecycle and event logs appear in the browser developer console.
+
+### TypeScript build / type-check
+
+```bash
 npm run build
 ```
 
-The compiled output is in `dist/`. The main entry point (`src/index.ts`) creates a spinning 3D cube and a mozaik `BaseParticipant` agent that logs lifecycle events — demonstrating how an agentic reactive environment can coexist with a real-time rendering loop.
+The compiled output goes into `dist/`. This is the standard TypeScript compile/check pass and does not produce a browser bundle.
 
 ## What it does
 
